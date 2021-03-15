@@ -27,6 +27,8 @@ var pawnPromotion bool
 var whitePawn bool
 var promotionSquare bitboard.Bitboard
 
+var depth int = 6
+
 const (
 	whitePawnImage   int = 5
 	whiteRookImage   int = 4
@@ -141,7 +143,7 @@ func HandleInput(board *bitboard.ChessBoard) {
 							promotionSquare = promotion
 							fmt.Println("1: Queen\n2: Rook\n3: Bishop\n4: Knight")
 						} else {
-							_, m := bitboard.NegaMax(*board, 3, true)
+							m := bitboard.Search(*board, depth)
 							bitboard.DoMove(board, m)
 							board.BlacksTurn = !board.BlacksTurn
 						}
@@ -169,7 +171,7 @@ func HandleInput(board *bitboard.ChessBoard) {
 			} else {
 				board.PromotePawn(promotionSquare, bitboard.BlackQueen)
 			}
-			_, m := bitboard.NegaMax(*board, 3, true)
+			m := bitboard.Search(*board, depth)
 			bitboard.DoMove(board, m)
 			board.BlacksTurn = !board.BlacksTurn
 		} else if ebiten.IsKeyPressed(ebiten.Key2) {
@@ -178,7 +180,7 @@ func HandleInput(board *bitboard.ChessBoard) {
 			} else {
 				board.PromotePawn(promotionSquare, bitboard.BlackRook)
 			}
-			_, m := bitboard.NegaMax(*board, 3, true)
+			m := bitboard.Search(*board, depth)
 			bitboard.DoMove(board, m)
 			board.BlacksTurn = !board.BlacksTurn
 		} else if ebiten.IsKeyPressed(ebiten.Key3) {
@@ -187,7 +189,7 @@ func HandleInput(board *bitboard.ChessBoard) {
 			} else {
 				board.PromotePawn(promotionSquare, bitboard.BlackBishop)
 			}
-			_, m := bitboard.NegaMax(*board, 3, true)
+			m := bitboard.Search(*board, depth)
 			bitboard.DoMove(board, m)
 			board.BlacksTurn = !board.BlacksTurn
 		} else if ebiten.IsKeyPressed(ebiten.Key4) {
@@ -196,7 +198,7 @@ func HandleInput(board *bitboard.ChessBoard) {
 			} else {
 				board.PromotePawn(promotionSquare, bitboard.BlackKnight)
 			}
-			_, m := bitboard.NegaMax(*board, 3, true)
+			m := bitboard.Search(*board, depth)
 			bitboard.DoMove(board, m)
 			board.BlacksTurn = !board.BlacksTurn
 		} else {

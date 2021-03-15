@@ -1,5 +1,9 @@
 package bitboard
 
+import (
+	"math/bits"
+)
+
 func bitboardToSlice(board Bitboard) []int {
 	bits := []int{}
 	for i := 0; i < 64; i++ {
@@ -21,6 +25,17 @@ type move struct {
 	pawnPromotionPiece PieceType
 	enPassant          bool
 }
+
+const (
+	int32lowest  int32 = -2147483647
+	int32highest int32 = 2147483647
+
+	pawnValue   int = 100
+	rookValue   int = 500
+	knightValue int = 320
+	bishopValue int = 330
+	queenValue  int = 900
+)
 
 func psudoLegalMoves(board *ChessBoard) []move {
 
@@ -266,11 +281,37 @@ func combinations(board ChessBoard, depth int) int {
 	return num
 }
 
-func NegaMax(board ChessBoard, depth int, root bool) (int32, move) {
+func negaMax(board ChessBoard, depth int, alpha, beta int32) int32 {
 	if depth == 0 {
-		return evaluate(board), move{}
+		return evaluate(board)
 	}
-	max := int32(-2147483648)
+
+	bestScore := int32lowest
+
+	moves := psudoLegalMoves(&board)
+	for _, m := range moves {
+		temp := board
+		DoMove(&board, m)
+		if !board.CheckForCheck(!board.BlacksTurn) {
+			board.BlacksTurn = !board.BlacksTurn
+			score := -negaMax(board, depth-1, -beta, -alpha)
+			if score >= beta {
+				return score
+			}
+			if score > bestScore {
+				bestScore = score
+				if score > alpha {
+					alpha = score
+				}
+			}
+		}
+		board = temp
+	}
+	return bestScore
+}
+
+func Search(board ChessBoard, depth int) move {
+	bestScore := int32lowest
 	var bestMove move
 
 	moves := psudoLegalMoves(&board)
@@ -279,17 +320,34 @@ func NegaMax(board ChessBoard, depth int, root bool) (int32, move) {
 		DoMove(&board, m)
 		if !board.CheckForCheck(!board.BlacksTurn) {
 			board.BlacksTurn = !board.BlacksTurn
-			score, _ := NegaMax(board, depth-1, false)
-			if -score > max {
-				max = -score
+			score := -negaMax(board, depth-1, int32lowest, int32highest)
+			if score >= bestScore {
+				bestScore = score
 				bestMove = m
 			}
 		}
 		board = temp
 	}
-	return max, bestMove
+	return bestMove
 }
 
 func evaluate(board ChessBoard) int32 {
-	return 0
+	score := 0
+
+	score += bits.OnesCount64(uint64(board.WhitePawns)) * pawnValue
+	score += bits.OnesCount64(uint64(board.WhiteRooks)) * rookValue
+	score += bits.OnesCount64(uint64(board.WhiteKnights)) * knightValue
+	score += bits.OnesCount64(uint64(board.WhiteBishops)) * bishopValue
+	score += bits.OnesCount64(uint64(board.WhiteQueens)) * queenValue
+
+	score -= bits.OnesCount64(uint64(board.BlackPawns)) * pawnValue
+	score -= bits.OnesCount64(uint64(board.BlackRooks)) * rookValue
+	score -= bits.OnesCount64(uint64(board.BlackKnights)) * knightValue
+	score -= bits.OnesCount64(uint64(board.BlackBishops)) * bishopValue
+	score -= bits.OnesCount64(uint64(board.BlackQueens)) * queenValue
+
+	if board.BlacksTurn {
+		score *= -1
+	}
+	return int32(score)
 }
