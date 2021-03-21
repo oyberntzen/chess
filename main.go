@@ -1,7 +1,10 @@
 package main
 
 import (
+	"flag"
 	"log"
+	"os"
+	"runtime/pprof"
 
 	"github.com/hajimehoshi/ebiten"
 	"github.com/oyberntzen/chessbot/bitboard"
@@ -29,10 +32,22 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 	return outsideWidth, outsideHeight
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 	ebiten.SetWindowSize(400, 400)
 	g := game{}
 	g.board = bitboard.FenString("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -")
+	g.board.Init()
 
 	if err := ebiten.RunGame(&g); err != nil {
 		log.Fatal(err)
