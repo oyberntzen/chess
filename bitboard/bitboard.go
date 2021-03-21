@@ -22,6 +22,8 @@ type ChessBoard struct {
 	BlackQueens  Bitboard
 	BlackKing    Bitboard
 
+	AllBitboards [12]*Bitboard
+
 	AllWhitePieces Bitboard
 	AllBlackPieces Bitboard
 	AllPieces      Bitboard
@@ -53,6 +55,18 @@ const (
 	BlackQueen  PieceType = 11
 	BlackKing   PieceType = 12
 )
+
+type Move struct {
+	From  Bitboard
+	To    Bitboard
+	Piece PieceType
+
+	LongCastle  bool
+	ShortCastle bool
+
+	PawnPromotionPiece PieceType
+	EnPassant          bool
+}
 
 var (
 	clearRank [8]Bitboard = [8]Bitboard{
@@ -249,6 +263,218 @@ var posToString map[Bitboard]string = map[Bitboard]string{
 	h8: "h8",
 }
 
+func (board *ChessBoard) PsudoLegalMoves(onlyCaptures bool) []Move {
+	andWith := ^Bitboard(0)
+	if onlyCaptures {
+		if board.BlacksTurn {
+			andWith = board.AllWhitePieces
+		} else {
+			andWith = board.AllBlackPieces
+		}
+	}
+
+	psudomoves := []Move{}
+	if !board.BlacksTurn {
+		for _, From := range BitboardToSlice(board.WhitePawns) {
+			moves := whitePawnMoves(1<<From, board.AllPieces, board.AllBlackPieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<To, WhitePawn, false)...)
+			}
+			left, _, right, _ := whiteEnPassant(1<<From, board.AllPieces, board.BlackPawns, board.LastBlackPawns)
+			if left > 0 {
+				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<(From+9), WhitePawn, true)...)
+			}
+			if right > 0 {
+				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<(From+7), WhitePawn, true)...)
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.WhiteRooks) {
+			moves := rookMoves(1<<From, board.AllPieces, board.AllWhitePieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: WhiteRook})
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.WhiteKnights) {
+			moves := knightMoves(1<<From, board.AllWhitePieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: WhiteKnight})
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.WhiteBishops) {
+			moves := bishopMoves(1<<From, board.AllPieces, board.AllWhitePieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: WhiteBishop})
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.WhiteQueens) {
+			moves := queenMoves(1<<From, board.AllPieces, board.AllWhitePieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: WhiteQueen})
+			}
+		}
+
+		moves := kingMoves(board.WhiteKing, board.AllWhitePieces) & andWith
+		for _, To := range BitboardToSlice(moves) {
+			psudomoves = append(psudomoves, Move{From: board.WhiteKing, To: 1 << To, Piece: WhiteKing})
+		}
+		attacking := board.BlackAttacking()
+		if whiteLongCastle(board.WhiteLongCastle, board.AllPieces, attacking) && andWith == ^Bitboard(0) {
+			psudomoves = append(psudomoves, Move{From: board.WhiteKing, To: c1, Piece: WhiteKing, LongCastle: true})
+		}
+		if whiteShortCastle(board.WhiteShortCastle, board.AllPieces, attacking) && andWith == ^Bitboard(0) {
+			psudomoves = append(psudomoves, Move{From: board.WhiteKing, To: g1, Piece: WhiteKing, ShortCastle: true})
+		}
+	} else {
+		for _, From := range BitboardToSlice(board.BlackPawns) {
+			moves := blackPawnMoves(1<<From, board.AllPieces, board.AllWhitePieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<To, BlackPawn, false)...)
+			}
+			left, _, right, _ := blackEnPassant(1<<From, board.AllPieces, board.WhitePawns, board.LastWhitePawns)
+			if left > 0 {
+				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<(From-7), BlackPawn, true)...)
+			}
+			if right > 0 {
+				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<(From-9), BlackPawn, true)...)
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.BlackRooks) {
+			moves := rookMoves(1<<From, board.AllPieces, board.AllBlackPieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: BlackRook})
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.BlackKnights) {
+			moves := knightMoves(1<<From, board.AllBlackPieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: BlackKnight})
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.BlackBishops) {
+			moves := bishopMoves(1<<From, board.AllPieces, board.AllBlackPieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: BlackBishop})
+			}
+		}
+
+		for _, From := range BitboardToSlice(board.BlackQueens) {
+			moves := queenMoves(1<<From, board.AllPieces, board.AllBlackPieces) & andWith
+			for _, To := range BitboardToSlice(moves) {
+				psudomoves = append(psudomoves, Move{From: 1 << From, To: 1 << To, Piece: BlackQueen})
+			}
+		}
+
+		moves := kingMoves(board.BlackKing, board.AllBlackPieces) & andWith
+		for _, To := range BitboardToSlice(moves) {
+			psudomoves = append(psudomoves, Move{From: board.BlackKing, To: 1 << To, Piece: BlackKing})
+		}
+		attacking := board.WhiteAttacking()
+		if blackLongCastle(board.BlackLongCastle, board.AllPieces, attacking) && andWith == ^Bitboard(0) {
+			psudomoves = append(psudomoves, Move{From: board.BlackKing, To: c8, Piece: BlackKing, LongCastle: true})
+		}
+		if blackShortCastle(board.BlackShortCastle, board.AllPieces, attacking) && andWith == ^Bitboard(0) {
+			psudomoves = append(psudomoves, Move{From: board.BlackKing, To: g8, Piece: BlackKing, ShortCastle: true})
+		}
+	}
+	return psudomoves
+}
+
+func (board *ChessBoard) DoMove(m Move) {
+	board.LastWhitePawns = board.WhitePawns
+	board.LastBlackPawns = board.BlackPawns
+	if m.Piece == WhitePawn {
+		if m.EnPassant {
+			board.DeleteOnSquare(m.To >> 8)
+		} else {
+			board.DeleteOnSquare(m.To)
+		}
+		board.WhitePawns = (board.WhitePawns & ^m.From) | m.To
+		if m.PawnPromotionPiece != 0 {
+			board.PromotePawn(m.To, m.PawnPromotionPiece)
+		}
+	} else if m.Piece == WhiteRook {
+		board.DeleteOnSquare(m.To)
+		board.WhiteRooks = (board.WhiteRooks & ^m.From) | m.To
+	} else if m.Piece == WhiteKnight {
+		board.DeleteOnSquare(m.To)
+		board.WhiteKnights = (board.WhiteKnights & ^m.From) | m.To
+	} else if m.Piece == WhiteBishop {
+		board.DeleteOnSquare(m.To)
+		board.WhiteBishops = (board.WhiteBishops & ^m.From) | m.To
+	} else if m.Piece == WhiteQueen {
+		board.DeleteOnSquare(m.To)
+		board.WhiteQueens = (board.WhiteQueens & ^m.From) | m.To
+	} else if m.Piece == WhiteKing {
+		board.DeleteOnSquare(m.To)
+		board.WhiteKing = (board.WhiteKing & ^m.From) | m.To
+		if m.LongCastle {
+			board.WhiteRooks = (board.WhiteRooks & ^a1) | d1
+		} else if m.ShortCastle {
+			board.WhiteRooks = (board.WhiteRooks & ^h1) | f1
+		}
+		board.WhiteLongCastle = false
+		board.WhiteShortCastle = false
+	}
+
+	if m.Piece == BlackPawn {
+		if m.EnPassant {
+			board.DeleteOnSquare(m.To << 8)
+		} else {
+			board.DeleteOnSquare(m.To)
+		}
+		board.BlackPawns = (board.BlackPawns & ^m.From) | m.To
+		if m.PawnPromotionPiece != 0 {
+			board.PromotePawn(m.To, m.PawnPromotionPiece)
+		}
+	} else if m.Piece == BlackRook {
+		board.DeleteOnSquare(m.To)
+		board.BlackRooks = (board.BlackRooks & ^m.From) | m.To
+	} else if m.Piece == BlackKnight {
+		board.DeleteOnSquare(m.To)
+		board.BlackKnights = (board.BlackKnights & ^m.From) | m.To
+	} else if m.Piece == BlackBishop {
+		board.DeleteOnSquare(m.To)
+		board.BlackBishops = (board.BlackBishops & ^m.From) | m.To
+	} else if m.Piece == BlackQueen {
+		board.DeleteOnSquare(m.To)
+		board.BlackQueens = (board.BlackQueens & ^m.From) | m.To
+	} else if m.Piece == BlackKing {
+		board.DeleteOnSquare(m.To)
+		board.BlackKing = (board.BlackKing & ^m.From) | m.To
+		if m.LongCastle {
+			board.BlackRooks = (board.BlackRooks & ^a8) | d8
+		} else if m.ShortCastle {
+			board.BlackRooks = (board.BlackRooks & ^h8) | f8
+		}
+		board.BlackLongCastle = false
+		board.BlackShortCastle = false
+	}
+
+	if board.WhiteRooks&a1 == 0 {
+		board.WhiteLongCastle = false
+	}
+	if board.WhiteRooks&h1 == 0 {
+		board.WhiteShortCastle = false
+	}
+	if board.BlackRooks&a8 == 0 {
+		board.BlackLongCastle = false
+	}
+	if board.BlackRooks&h8 == 0 {
+		board.BlackShortCastle = false
+	}
+
+	board.AllWhitePieces = board.WhitePawns | board.WhiteRooks | board.WhiteKnights | board.WhiteBishops | board.WhiteQueens | board.WhiteKing
+	board.AllBlackPieces = board.BlackPawns | board.BlackRooks | board.BlackKnights | board.BlackBishops | board.BlackQueens | board.BlackKing
+	board.AllPieces = board.AllWhitePieces | board.AllBlackPieces
+}
+
 func (board *ChessBoard) MovesOnSquare(square Bitboard) Bitboard {
 	if board.WhitePawns&square > 0 {
 		moves := whitePawnMoves(square, board.AllPieces, board.AllBlackPieces)
@@ -300,34 +526,34 @@ func (board *ChessBoard) MovesOnSquare(square Bitboard) Bitboard {
 	return 0
 }
 
-func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitboard) {
+func (board *ChessBoard) MovePiece(From Bitboard, To Bitboard) (bool, bool, Bitboard) {
 	promotions := Bitboard(0)
 	whitePawn := false
 	newLastWhitePawns := Bitboard(0)
 	newLastBlackPawns := Bitboard(0)
-	if board.WhitePawns&from > 0 && !board.BlacksTurn {
-		left, leftTaken, right, rightTaken := whiteEnPassant(from, board.AllPieces, board.BlackPawns, board.LastBlackPawns)
-		if left == to {
-			board.WhitePawns = (board.WhitePawns & ^from) | to
+	if board.WhitePawns&From > 0 && !board.BlacksTurn {
+		left, leftTaken, right, rightTaken := whiteEnPassant(From, board.AllPieces, board.BlackPawns, board.LastBlackPawns)
+		if left == To {
+			board.WhitePawns = (board.WhitePawns & ^From) | To
 			board.BlackPawns &= ^leftTaken
 			if board.CheckForCheck(true) {
-				board.WhitePawns = (board.WhitePawns & ^to) | from
+				board.WhitePawns = (board.WhitePawns & ^To) | From
 				board.BlackPawns |= leftTaken
 			}
-		} else if right == to {
-			board.WhitePawns = (board.WhitePawns & ^from) | to
+		} else if right == To {
+			board.WhitePawns = (board.WhitePawns & ^From) | To
 			board.BlackPawns &= ^rightTaken
 			if board.CheckForCheck(true) {
-				board.WhitePawns = (board.WhitePawns & ^to) | from
+				board.WhitePawns = (board.WhitePawns & ^To) | From
 				board.BlackPawns |= rightTaken
 			}
-		} else if whitePawnMoves(from, board.AllPieces, board.AllBlackPieces)&to > 0 {
+		} else if whitePawnMoves(From, board.AllPieces, board.AllBlackPieces)&To > 0 {
 			before := board.WhitePawns
-			piece := board.DeleteOnSquare(to)
-			board.WhitePawns = (board.WhitePawns & ^from) | to
+			piece := board.DeleteOnSquare(To)
+			board.WhitePawns = (board.WhitePawns & ^From) | To
 			if board.CheckForCheck(true) {
-				board.WhitePawns = (board.WhitePawns & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.WhitePawns = (board.WhitePawns & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 			promotions = board.PawnPromotions(true)
@@ -336,13 +562,13 @@ func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitb
 		} else {
 			return false, false, 0
 		}
-	} else if board.WhiteRooks&from > 0 && !board.BlacksTurn {
-		if rookMoves(from, board.AllPieces, board.AllWhitePieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.WhiteRooks = (board.WhiteRooks & ^from) | to
+	} else if board.WhiteRooks&From > 0 && !board.BlacksTurn {
+		if rookMoves(From, board.AllPieces, board.AllWhitePieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.WhiteRooks = (board.WhiteRooks & ^From) | To
 			if board.CheckForCheck(true) {
-				board.WhiteRooks = (board.WhiteRooks & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.WhiteRooks = (board.WhiteRooks & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 			if board.WhiteRooks&a1 == 0 {
@@ -354,60 +580,60 @@ func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitb
 		} else {
 			return false, false, 0
 		}
-	} else if board.WhiteKnights&from > 0 && !board.BlacksTurn {
-		if knightMoves(from, board.AllWhitePieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.WhiteKnights = (board.WhiteKnights & ^from) | to
+	} else if board.WhiteKnights&From > 0 && !board.BlacksTurn {
+		if knightMoves(From, board.AllWhitePieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.WhiteKnights = (board.WhiteKnights & ^From) | To
 			if board.CheckForCheck(true) {
-				board.WhiteKnights = (board.WhiteKnights & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.WhiteKnights = (board.WhiteKnights & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 		} else {
 			return false, false, 0
 		}
-	} else if board.WhiteBishops&from > 0 && !board.BlacksTurn {
-		if bishopMoves(from, board.AllPieces, board.AllWhitePieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.WhiteBishops = (board.WhiteBishops & ^from) | to
+	} else if board.WhiteBishops&From > 0 && !board.BlacksTurn {
+		if bishopMoves(From, board.AllPieces, board.AllWhitePieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.WhiteBishops = (board.WhiteBishops & ^From) | To
 			if board.CheckForCheck(true) {
-				board.WhiteBishops = (board.WhiteBishops & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.WhiteBishops = (board.WhiteBishops & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 		} else {
 			return false, false, 0
 		}
-	} else if board.WhiteQueens&from > 0 && !board.BlacksTurn {
-		if queenMoves(from, board.AllPieces, board.AllWhitePieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.WhiteQueens = (board.WhiteQueens & ^from) | to
+	} else if board.WhiteQueens&From > 0 && !board.BlacksTurn {
+		if queenMoves(From, board.AllPieces, board.AllWhitePieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.WhiteQueens = (board.WhiteQueens & ^From) | To
 			if board.CheckForCheck(true) {
-				board.WhiteQueens = (board.WhiteQueens & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.WhiteQueens = (board.WhiteQueens & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 		} else {
 			return false, false, 0
 		}
-	} else if board.WhiteKing&from > 0 && !board.BlacksTurn {
+	} else if board.WhiteKing&From > 0 && !board.BlacksTurn {
 		attacking := board.BlackAttacking()
-		if whiteLongCastle(board.WhiteLongCastle, board.AllPieces, attacking) && to == c1 {
-			board.WhiteKing = (board.WhiteKing & ^from) | to
+		if whiteLongCastle(board.WhiteLongCastle, board.AllPieces, attacking) && To == c1 {
+			board.WhiteKing = (board.WhiteKing & ^From) | To
 			board.WhiteRooks = (board.WhiteRooks & ^a1) | d1
 			board.WhiteLongCastle = false
 			board.WhiteShortCastle = false
-		} else if whiteShortCastle(board.WhiteShortCastle, board.AllPieces, attacking) && to == g1 {
-			board.WhiteKing = (board.WhiteKing & ^from) | to
+		} else if whiteShortCastle(board.WhiteShortCastle, board.AllPieces, attacking) && To == g1 {
+			board.WhiteKing = (board.WhiteKing & ^From) | To
 			board.WhiteRooks = (board.WhiteRooks & ^h1) | f1
 			board.WhiteLongCastle = false
 			board.WhiteShortCastle = false
-		} else if kingMoves(from, board.AllWhitePieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.WhiteKing = (board.WhiteKing & ^from) | to
+		} else if kingMoves(From, board.AllWhitePieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.WhiteKing = (board.WhiteKing & ^From) | To
 			if board.CheckForCheck(true) {
-				board.WhiteKing = (board.WhiteKing & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.WhiteKing = (board.WhiteKing & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 			if board.WhiteKing&e1 == 0 {
@@ -417,29 +643,29 @@ func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitb
 		} else {
 			return false, false, 0
 		}
-	} else if board.BlackPawns&from > 0 && board.BlacksTurn {
-		left, leftTaken, right, rightTaken := blackEnPassant(from, board.AllPieces, board.WhitePawns, board.LastWhitePawns)
-		if left == to {
-			board.BlackPawns = (board.BlackPawns & ^from) | to
+	} else if board.BlackPawns&From > 0 && board.BlacksTurn {
+		left, leftTaken, right, rightTaken := blackEnPassant(From, board.AllPieces, board.WhitePawns, board.LastWhitePawns)
+		if left == To {
+			board.BlackPawns = (board.BlackPawns & ^From) | To
 			board.WhitePawns &= ^leftTaken
 			if board.CheckForCheck(false) {
-				board.BlackPawns = (board.BlackPawns & ^to) | from
+				board.BlackPawns = (board.BlackPawns & ^To) | From
 				board.WhitePawns |= leftTaken
 			}
-		} else if right == to {
-			board.BlackPawns = (board.BlackPawns & ^from) | to
+		} else if right == To {
+			board.BlackPawns = (board.BlackPawns & ^From) | To
 			board.WhitePawns &= ^rightTaken
 			if board.CheckForCheck(false) {
-				board.BlackPawns = (board.BlackPawns & ^to) | from
+				board.BlackPawns = (board.BlackPawns & ^To) | From
 				board.WhitePawns |= rightTaken
 			}
-		} else if blackPawnMoves(from, board.AllPieces, board.AllWhitePieces)&to > 0 {
+		} else if blackPawnMoves(From, board.AllPieces, board.AllWhitePieces)&To > 0 {
 			before := board.BlackPawns
-			piece := board.DeleteOnSquare(to)
-			board.BlackPawns = (board.BlackPawns & ^from) | to
+			piece := board.DeleteOnSquare(To)
+			board.BlackPawns = (board.BlackPawns & ^From) | To
 			if board.CheckForCheck(false) {
-				board.BlackPawns = (board.BlackPawns & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.BlackPawns = (board.BlackPawns & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 			promotions = board.PawnPromotions(false)
@@ -447,13 +673,13 @@ func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitb
 		} else {
 			return false, false, 0
 		}
-	} else if board.BlackRooks&from > 0 && board.BlacksTurn {
-		if rookMoves(from, board.AllPieces, board.AllBlackPieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.BlackRooks = (board.BlackRooks & ^from) | to
+	} else if board.BlackRooks&From > 0 && board.BlacksTurn {
+		if rookMoves(From, board.AllPieces, board.AllBlackPieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.BlackRooks = (board.BlackRooks & ^From) | To
 			if board.CheckForCheck(false) {
-				board.BlackRooks = (board.BlackRooks & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.BlackRooks = (board.BlackRooks & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 			if board.BlackRooks&a8 == 0 {
@@ -465,60 +691,60 @@ func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitb
 		} else {
 			return false, false, 0
 		}
-	} else if board.BlackKnights&from > 0 && board.BlacksTurn {
-		if knightMoves(from, board.AllBlackPieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.BlackKnights = (board.BlackKnights & ^from) | to
+	} else if board.BlackKnights&From > 0 && board.BlacksTurn {
+		if knightMoves(From, board.AllBlackPieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.BlackKnights = (board.BlackKnights & ^From) | To
 			if board.CheckForCheck(false) {
-				board.BlackKnights = (board.BlackKnights & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.BlackKnights = (board.BlackKnights & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 		} else {
 			return false, false, 0
 		}
-	} else if board.BlackBishops&from > 0 && board.BlacksTurn {
-		if bishopMoves(from, board.AllPieces, board.AllBlackPieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.BlackBishops = (board.BlackBishops & ^from) | to
+	} else if board.BlackBishops&From > 0 && board.BlacksTurn {
+		if bishopMoves(From, board.AllPieces, board.AllBlackPieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.BlackBishops = (board.BlackBishops & ^From) | To
 			if board.CheckForCheck(false) {
-				board.BlackBishops = (board.BlackBishops & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.BlackBishops = (board.BlackBishops & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 		} else {
 			return false, false, 0
 		}
-	} else if board.BlackQueens&from > 0 && board.BlacksTurn {
-		if queenMoves(from, board.AllPieces, board.AllBlackPieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.BlackQueens = (board.BlackQueens & ^from) | to
+	} else if board.BlackQueens&From > 0 && board.BlacksTurn {
+		if queenMoves(From, board.AllPieces, board.AllBlackPieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.BlackQueens = (board.BlackQueens & ^From) | To
 			if board.CheckForCheck(false) {
-				board.BlackQueens = (board.BlackQueens & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.BlackQueens = (board.BlackQueens & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 		} else {
 			return false, false, 0
 		}
-	} else if board.BlackKing&from > 0 && board.BlacksTurn {
+	} else if board.BlackKing&From > 0 && board.BlacksTurn {
 		attacking := board.WhiteAttacking()
-		if blackLongCastle(board.BlackLongCastle, board.AllPieces, attacking) && to == c8 {
-			board.BlackKing = (board.BlackKing & ^from) | to
+		if blackLongCastle(board.BlackLongCastle, board.AllPieces, attacking) && To == c8 {
+			board.BlackKing = (board.BlackKing & ^From) | To
 			board.BlackRooks = (board.BlackRooks & ^a8) | d8
 			board.BlackLongCastle = false
 			board.BlackShortCastle = false
-		} else if blackShortCastle(board.BlackShortCastle, board.AllPieces, attacking) && to == g8 {
-			board.BlackKing = (board.BlackKing & ^from) | to
+		} else if blackShortCastle(board.BlackShortCastle, board.AllPieces, attacking) && To == g8 {
+			board.BlackKing = (board.BlackKing & ^From) | To
 			board.BlackRooks = (board.BlackRooks & ^h8) | f8
 			board.BlackLongCastle = false
 			board.BlackShortCastle = false
-		} else if kingMoves(from, board.AllBlackPieces)&to > 0 {
-			piece := board.DeleteOnSquare(to)
-			board.BlackKing = (board.BlackKing & ^from) | to
+		} else if kingMoves(From, board.AllBlackPieces)&To > 0 {
+			piece := board.DeleteOnSquare(To)
+			board.BlackKing = (board.BlackKing & ^From) | To
 			if board.CheckForCheck(false) {
-				board.BlackKing = (board.BlackKing & ^to) | from
-				board.PlaceOnSquare(to, piece)
+				board.BlackKing = (board.BlackKing & ^To) | From
+				board.PlaceOnSquare(To, piece)
 				return false, false, 0
 			}
 			if board.BlackKing&e8 == 0 {
@@ -540,13 +766,13 @@ func (board *ChessBoard) MovePiece(from Bitboard, to Bitboard) (bool, bool, Bitb
 
 	board.BlacksTurn = !board.BlacksTurn
 
-	if to == a1 {
+	if To == a1 {
 		board.WhiteLongCastle = false
-	} else if to == h1 {
+	} else if To == h1 {
 		board.WhiteShortCastle = false
-	} else if to == a8 {
+	} else if To == a8 {
 		board.BlackLongCastle = false
-	} else if to == h8 {
+	} else if To == h8 {
 		board.BlackShortCastle = false
 	}
 
@@ -623,9 +849,9 @@ func (board *ChessBoard) PlaceOnSquare(square Bitboard, piece PieceType) {
 	}
 }
 
-func (board *ChessBoard) MovePieceSimple(from Bitboard, to Bitboard, pieces Bitboard, whiteSide bool) (bool, Bitboard) {
-	board.DeleteOnSquare(to)
-	newPieces := (pieces & ^from) | to
+func (board *ChessBoard) MovePieceSimple(From Bitboard, To Bitboard, pieces Bitboard, whiteSide bool) (bool, Bitboard) {
+	board.DeleteOnSquare(To)
+	newPieces := (pieces & ^From) | To
 	if board.CheckForCheck(whiteSide) {
 		return false, pieces
 	}
@@ -703,6 +929,25 @@ func (board *ChessBoard) PromotePawn(square Bitboard, newType PieceType) {
 		board.BlackPawns &= ^square
 		board.BlackKnights |= square
 	}
+}
+
+func (board *ChessBoard) Init() {
+	board.AllWhitePieces = board.WhitePawns | board.WhiteRooks | board.WhiteKnights | board.WhiteBishops | board.WhiteQueens | board.WhiteKing
+	board.AllBlackPieces = board.BlackPawns | board.BlackRooks | board.BlackKnights | board.BlackBishops | board.BlackQueens | board.BlackKing
+	board.AllPieces = board.AllWhitePieces | board.AllBlackPieces
+
+	board.AllBitboards[0] = &board.WhitePawns
+	board.AllBitboards[1] = &board.WhiteRooks
+	board.AllBitboards[2] = &board.WhiteKnights
+	board.AllBitboards[3] = &board.WhiteBishops
+	board.AllBitboards[4] = &board.WhiteQueens
+	board.AllBitboards[5] = &board.WhiteKing
+	board.AllBitboards[6] = &board.BlackPawns
+	board.AllBitboards[7] = &board.BlackRooks
+	board.AllBitboards[8] = &board.BlackKnights
+	board.AllBitboards[9] = &board.BlackBishops
+	board.AllBitboards[10] = &board.BlackQueens
+	board.AllBitboards[11] = &board.BlackKing
 }
 
 func StandardChessBoard() ChessBoard {
@@ -813,9 +1058,43 @@ func FenString(fen string) ChessBoard {
 	board.AllWhitePieces = board.WhitePawns | board.WhiteRooks | board.WhiteKnights | board.WhiteBishops | board.WhiteQueens | board.WhiteKing
 	board.AllBlackPieces = board.BlackPawns | board.BlackRooks | board.BlackKnights | board.BlackBishops | board.BlackQueens | board.BlackKing
 	board.AllPieces = board.AllWhitePieces | board.AllBlackPieces
+
+	board.AllBitboards[0] = &board.WhitePawns
+	board.AllBitboards[1] = &board.WhiteRooks
+	board.AllBitboards[2] = &board.WhiteKnights
+	board.AllBitboards[3] = &board.WhiteBishops
+	board.AllBitboards[4] = &board.WhiteQueens
+	board.AllBitboards[5] = &board.WhiteKing
+	board.AllBitboards[6] = &board.BlackPawns
+	board.AllBitboards[7] = &board.BlackRooks
+	board.AllBitboards[8] = &board.BlackKnights
+	board.AllBitboards[9] = &board.BlackBishops
+	board.AllBitboards[10] = &board.BlackQueens
+	board.AllBitboards[11] = &board.BlackKing
+
 	return board
 }
 
 func CoordsToBitboard(x, y int) Bitboard {
 	return maskFile[x] & maskRank[7-y]
+}
+
+func pawnMoves(From, To Bitboard, piece PieceType, enPassant bool) []Move {
+	if piece == WhitePawn && To&maskRank[rank8] > 0 {
+		return []Move{
+			{From: From, To: To, Piece: WhitePawn, EnPassant: enPassant, PawnPromotionPiece: WhiteQueen},
+			{From: From, To: To, Piece: WhitePawn, EnPassant: enPassant, PawnPromotionPiece: WhiteRook},
+			{From: From, To: To, Piece: WhitePawn, EnPassant: enPassant, PawnPromotionPiece: WhiteBishop},
+			{From: From, To: To, Piece: WhitePawn, EnPassant: enPassant, PawnPromotionPiece: WhiteKnight},
+		}
+	}
+	if piece == BlackPawn && To&maskRank[rank1] > 0 {
+		return []Move{
+			{From: From, To: To, Piece: BlackPawn, EnPassant: enPassant, PawnPromotionPiece: BlackQueen},
+			{From: From, To: To, Piece: BlackPawn, EnPassant: enPassant, PawnPromotionPiece: BlackRook},
+			{From: From, To: To, Piece: BlackPawn, EnPassant: enPassant, PawnPromotionPiece: BlackBishop},
+			{From: From, To: To, Piece: BlackPawn, EnPassant: enPassant, PawnPromotionPiece: BlackKnight},
+		}
+	}
+	return []Move{{From: From, To: To, Piece: piece, EnPassant: enPassant}}
 }
