@@ -24,8 +24,7 @@ var moves bitboard.Bitboard
 var pressed bool
 
 var pawnPromotion bool
-var whitePawn bool
-var promotionSquare bitboard.Bitboard
+var promotionMoves []bitboard.Move
 
 var depth int = 4
 
@@ -134,30 +133,32 @@ func HandleInput(board *bitboard.ChessBoard) {
 				x, y := ebiten.CursorPosition()
 				if x < 400 && y < 400 {
 					newMarked := bitboard.CoordsToBitboard(x/50, y/50)
-					if ok, col, promotion := board.MovePiece(marked, newMarked); ok {
-						marked = 0
-						moves = 0
-						if promotion > 0 {
+					var psudomoves []bitboard.Move
+					var validMove bool
+					for _, m := range board.PsudoLegalMoves(false) {
+						if m.From == marked && m.To == newMarked {
+							psudomoves = append(psudomoves, m)
+							validMove = true
+						}
+					}
+					if validMove {
+						if len(psudomoves) > 1 {
 							pawnPromotion = true
-							whitePawn = col
-							promotionSquare = promotion
 							fmt.Println("1: Queen\n2: Rook\n3: Bishop\n4: Knight")
 						} else {
-							m := bitboard.Search(board, depth)
-							board.DoMove(m)
-							board.BlacksTurn = !board.BlacksTurn
+							doMove(board, psudomoves[0])
 						}
+
 					} else {
 						if newMarked == marked {
 							marked = 0
 							moves = 0
 						} else {
 							marked = newMarked
-							moves = board.MovesOnSquare(marked)
-							from := bitboard.BitboardToSlice(marked)[0]
+							moves = bitboard.Bitboard(0)
 							for _, m := range board.PsudoLegalMoves(false) {
-								if from == uint8(m.From) {
-									moves |= 1 << from
+								if marked == m.From {
+									moves |= m.To
 								}
 							}
 						}
@@ -171,44 +172,54 @@ func HandleInput(board *bitboard.ChessBoard) {
 
 	if pawnPromotion {
 		pawnPromotion = false
+		var whitePiece bitboard.PieceType
+		var blackPiece bitboard.PieceType
+
 		if ebiten.IsKeyPressed(ebiten.Key1) {
-			if whitePawn {
-				board.PromotePawn(promotionSquare, bitboard.WhiteQueen)
-			} else {
-				board.PromotePawn(promotionSquare, bitboard.BlackQueen)
-			}
-			m := bitboard.Search(board, depth)
-			board.DoMove(m)
-			board.BlacksTurn = !board.BlacksTurn
+			whitePiece = bitboard.WhiteQueen
+			blackPiece = bitboard.BlackQueen
 		} else if ebiten.IsKeyPressed(ebiten.Key2) {
-			if whitePawn {
-				board.PromotePawn(promotionSquare, bitboard.WhiteRook)
-			} else {
-				board.PromotePawn(promotionSquare, bitboard.BlackRook)
-			}
-			m := bitboard.Search(board, depth)
-			board.DoMove(m)
-			board.BlacksTurn = !board.BlacksTurn
+			whitePiece = bitboard.WhiteRook
+			blackPiece = bitboard.BlackRook
 		} else if ebiten.IsKeyPressed(ebiten.Key3) {
-			if whitePawn {
-				board.PromotePawn(promotionSquare, bitboard.WhiteBishop)
-			} else {
-				board.PromotePawn(promotionSquare, bitboard.BlackBishop)
-			}
-			m := bitboard.Search(board, depth)
-			board.DoMove(m)
-			board.BlacksTurn = !board.BlacksTurn
+			whitePiece = bitboard.WhiteBishop
+			blackPiece = bitboard.BlackBishop
 		} else if ebiten.IsKeyPressed(ebiten.Key4) {
-			if whitePawn {
-				board.PromotePawn(promotionSquare, bitboard.WhiteKnight)
-			} else {
-				board.PromotePawn(promotionSquare, bitboard.BlackKnight)
-			}
-			m := bitboard.Search(board, depth)
-			board.DoMove(m)
-			board.BlacksTurn = !board.BlacksTurn
+			whitePiece = bitboard.WhiteKnight
+			blackPiece = bitboard.BlackKnight
 		} else {
 			pawnPromotion = true
+		}
+
+		for _, m := range promotionMoves {
+			if m.PawnPromotionPiece == whitePiece || m.PawnPromotionPiece == blackPiece {
+				doMove(board, m)
+			}
+		}
+	}
+}
+
+func doMove(board *bitboard.ChessBoard, m bitboard.Move) {
+	temp := *board
+	board.DoMove(m)
+	if !board.CheckForCheck(board.BlacksTurn) {
+		marked = 0
+		moves = 0
+		m := bitboard.Search(board, depth)
+		board.DoMove(m)
+	} else {
+		*board = temp
+		if m.To == marked {
+			marked = 0
+			moves = 0
+		} else {
+			marked = m.To
+			moves = bitboard.Bitboard(0)
+			for _, m := range board.PsudoLegalMoves(false) {
+				if marked == m.From {
+					moves |= m.To
+				}
+			}
 		}
 	}
 }
