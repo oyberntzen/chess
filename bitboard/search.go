@@ -11,7 +11,7 @@ const (
 
 var numberToBits [8][256][]uint8
 
-func combinations(board ChessBoard, depth int) int {
+func combinations(board *ChessBoard, depth int) int {
 	if depth == 0 {
 		return 1
 	}
@@ -19,14 +19,13 @@ func combinations(board ChessBoard, depth int) int {
 	moves := board.PsudoLegalMoves(false)
 	num := 0
 	for _, m := range moves {
-		temp := board
+		temp := *board
 		board.DoMove(m)
-		if !board.CheckForCheck(!board.BlacksTurn) {
-			board.BlacksTurn = !board.BlacksTurn
+		if !board.CheckForCheck(board.BlacksTurn) {
 			add := combinations(board, depth-1)
 			num += add
 		}
-		board = temp
+		*board = temp
 	}
 	return num
 }
@@ -42,9 +41,8 @@ func negaMax(board *ChessBoard, depth int, alpha, beta int32) int32 {
 	for _, m := range moves {
 		temp := *board
 		board.DoMove(m)
-		if !board.CheckForCheck(!board.BlacksTurn) {
+		if !board.CheckForCheck(board.BlacksTurn) {
 			moved = true
-			board.BlacksTurn = !board.BlacksTurn
 			score := -negaMax(board, depth-1, -beta, -alpha)
 			if score >= beta {
 				return score
@@ -80,8 +78,7 @@ func quiscence(board *ChessBoard, alpha, beta int32) int32 {
 	for _, m := range moves {
 		temp := *board
 		board.DoMove(m)
-		if !board.CheckForCheck(!board.BlacksTurn) {
-			board.BlacksTurn = !board.BlacksTurn
+		if !board.CheckForCheck(board.BlacksTurn) {
 			score := -quiscence(board, -beta, -alpha)
 			if score >= beta {
 				return beta
@@ -103,8 +100,7 @@ func Search(board *ChessBoard, depth int) Move {
 	for _, m := range moves {
 		temp := *board
 		board.DoMove(m)
-		if !board.CheckForCheck(!board.BlacksTurn) {
-			board.BlacksTurn = !board.BlacksTurn
+		if !board.CheckForCheck(board.BlacksTurn) {
 			score := -negaMax(board, depth-1, int32lowest, int32highest)
 			if score >= bestScore {
 				bestScore = score
