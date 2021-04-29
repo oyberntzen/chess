@@ -33,14 +33,14 @@ type ChessBoard struct {
 	BlackShortCastle bool
 	BlackLongCastle  bool
 
-	LastWhitePawns Bitboard
-	LastBlackPawns Bitboard
 	WhiteEnPassant uint8
 	BlackEnPassant uint8
 
 	BlacksTurn bool
 
 	Zobrist uint64
+
+	LastHashes []uint64
 }
 
 type PieceType uint8
@@ -177,8 +177,7 @@ func (board *ChessBoard) PsudoLegalMoves(onlyCaptures bool) []Move {
 			for _, To := range BitboardToSlice(moves) {
 				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<To, From, To, WhitePawn, false)...)
 			}
-			//left, _, right, _ := whiteEnPassant(1<<From, board.AllPieces, board.BlackPawns, board.LastBlackPawns)
-			left, right := whiteEnPassant2(1<<From, board.BlackEnPassant)
+			left, right := whiteEnPassant(1<<From, board.BlackEnPassant)
 			if left > 0 {
 				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<(From+9), From, From+9, WhitePawn, true)...)
 			}
@@ -233,8 +232,7 @@ func (board *ChessBoard) PsudoLegalMoves(onlyCaptures bool) []Move {
 			for _, To := range BitboardToSlice(moves) {
 				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<To, From, To, BlackPawn, false)...)
 			}
-			//left, _, right, _ := blackEnPassant(1<<From, board.AllPieces, board.WhitePawns, board.LastWhitePawns)
-			left, right := blackEnPassant2(1<<From, board.WhiteEnPassant)
+			left, right := blackEnPassant(1<<From, board.WhiteEnPassant)
 			if left > 0 {
 				psudomoves = append(psudomoves, pawnMoves(1<<From, 1<<(From-7), From, From-7, BlackPawn, true)...)
 			}
@@ -288,8 +286,6 @@ func (board *ChessBoard) PsudoLegalMoves(onlyCaptures bool) []Move {
 }
 
 func (board *ChessBoard) DoMove(m Move) {
-	board.LastWhitePawns = board.WhitePawns
-	board.LastBlackPawns = board.BlackPawns
 	if board.WhiteEnPassant != 8 {
 		board.Zobrist ^= enPassantHashes[board.WhiteEnPassant]
 		board.WhiteEnPassant = 8
@@ -314,6 +310,7 @@ func (board *ChessBoard) DoMove(m Move) {
 			board.WhiteEnPassant = m.FromIndex % 8
 			board.Zobrist ^= enPassantHashes[m.FromIndex%8]
 		}
+		board.LastHashes = []uint64{}
 	} else if m.Piece == WhiteRook {
 		board.DeleteOnSquare(m.To, m.ToIndex)
 		board.WhiteRooks = (board.WhiteRooks & ^m.From) | m.To
@@ -366,6 +363,7 @@ func (board *ChessBoard) DoMove(m Move) {
 			board.BlackEnPassant = m.FromIndex % 8
 			board.Zobrist ^= enPassantHashes[m.FromIndex%8]
 		}
+		board.LastHashes = []uint64{}
 	} else if m.Piece == BlackRook {
 		board.DeleteOnSquare(m.To, m.ToIndex)
 		board.BlackRooks = (board.BlackRooks & ^m.From) | m.To
@@ -426,9 +424,12 @@ func (board *ChessBoard) DoMove(m Move) {
 
 	board.BlacksTurn = !board.BlacksTurn
 	board.Zobrist ^= blacksTurnHash
+
+	board.LastHashes = append(board.LastHashes, board.Zobrist)
 }
 
 func (board *ChessBoard) DeleteOnSquare(square Bitboard, index uint8) PieceType {
+	deleted := true
 	if board.WhitePawns&square > 0 {
 		board.WhitePawns &= ^square
 		board.Zobrist ^= positionHashes[WhitePawn-1][index]
@@ -477,6 +478,11 @@ func (board *ChessBoard) DeleteOnSquare(square Bitboard, index uint8) PieceType 
 		board.BlackKing &= ^square
 		board.Zobrist ^= positionHashes[BlackKing-1][index]
 		return BlackKing
+	} else {
+		deleted = false
+	}
+	if deleted {
+		board.LastHashes = []uint64{}
 	}
 	return 0
 }
@@ -569,6 +575,7 @@ func (board *ChessBoard) Init() {
 	board.BlackEnPassant = 8
 
 	board.Zobrist = boardToHash(board)
+	board.LastHashes = []uint64{board.Zobrist}
 }
 
 func FenString(fen string) ChessBoard {
