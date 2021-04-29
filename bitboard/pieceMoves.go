@@ -56,31 +56,7 @@ func blackPawnMoves(pawnLoc Bitboard, allPieces Bitboard, allWhitePieces Bitboar
 	return pawnValid
 }
 
-func whiteEnPassant(pawnLoc Bitboard, allPieces, blackPawns, lastBlackPawns Bitboard) (Bitboard, Bitboard, Bitboard, Bitboard) {
-	leftSide := (pawnLoc & clearFile[fileA]) << 9
-	leftSide &= ^(allPieces | lastBlackPawns)
-	leftSide &= ((lastBlackPawns & ^allPieces) >> 8) & ((blackPawns & ^lastBlackPawns) << 8)
-
-	rightSide := (pawnLoc & clearFile[fileH]) << 7
-	rightSide &= ^(allPieces | lastBlackPawns)
-	rightSide &= ((lastBlackPawns & ^allPieces) >> 8) & ((blackPawns & ^lastBlackPawns) << 8)
-
-	return leftSide, leftSide >> 8, rightSide, rightSide >> 8
-}
-
-func blackEnPassant(pawnLoc Bitboard, allPieces, whitePawns, lastWhitePawns Bitboard) (Bitboard, Bitboard, Bitboard, Bitboard) {
-	leftSide := (pawnLoc & clearFile[fileA]) >> 7
-	leftSide &= ^(allPieces | lastWhitePawns)
-	leftSide &= ((lastWhitePawns & ^allPieces) << 8) & ((whitePawns & ^lastWhitePawns) >> 8)
-
-	rightSide := (pawnLoc & clearFile[fileH]) >> 9
-	rightSide &= ^(allPieces | lastWhitePawns)
-	rightSide &= ((lastWhitePawns & ^allPieces) << 8) & ((whitePawns & ^lastWhitePawns) >> 8)
-
-	return leftSide, leftSide << 8, rightSide, rightSide << 8
-}
-
-func whiteEnPassant2(pawnLoc Bitboard, enPassant uint8) (Bitboard, Bitboard) {
+func whiteEnPassant(pawnLoc Bitboard, enPassant uint8) (Bitboard, Bitboard) {
 	if enPassant != 8 {
 		leftSide := (pawnLoc & clearFile[fileA]) & (1 << ((enPassant - 1) + 32))
 		rightSide := (pawnLoc & clearFile[fileH]) & (1 << ((enPassant + 1) + 32))
@@ -89,7 +65,7 @@ func whiteEnPassant2(pawnLoc Bitboard, enPassant uint8) (Bitboard, Bitboard) {
 	return 0, 0
 }
 
-func blackEnPassant2(pawnLoc Bitboard, enPassant uint8) (Bitboard, Bitboard) {
+func blackEnPassant(pawnLoc Bitboard, enPassant uint8) (Bitboard, Bitboard) {
 	if enPassant != 8 {
 		leftSide := (pawnLoc & clearFile[fileA]) & (1 << ((enPassant - 1) + 24))
 		rightSide := (pawnLoc & clearFile[fileH]) & (1 << ((enPassant + 1) + 24))

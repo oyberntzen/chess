@@ -26,8 +26,6 @@ var pressed bool
 var pawnPromotion bool
 var promotionMoves []bitboard.Move
 
-var depth int = 4
-
 const (
 	whitePawnImage   int = 5
 	whiteRookImage   int = 4
@@ -144,6 +142,7 @@ func HandleInput(board *bitboard.ChessBoard) {
 					if validMove {
 						if len(psudomoves) > 1 {
 							pawnPromotion = true
+							promotionMoves = psudomoves
 							fmt.Println("1: Queen\n2: Rook\n3: Bishop\n4: Knight")
 						} else {
 							doMove(board, psudomoves[0])
@@ -205,7 +204,7 @@ func doMove(board *bitboard.ChessBoard, m bitboard.Move) {
 	if !board.CheckForCheck(board.BlacksTurn) {
 		marked = 0
 		moves = 0
-		m := bitboard.Search(board, depth)
+		m := bitboard.IterativeDeepening(board)
 		board.DoMove(m)
 	} else {
 		*board = temp
