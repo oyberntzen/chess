@@ -2,17 +2,24 @@ package bitboard
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 )
 
 const (
-	int32lowest  int32 = -2147483647
-	int32highest int32 = 2147483647
+	int32lowest  int32         = -2147483647
+	int32highest int32         = 2147483647
+	timeWait     time.Duration = 60_000
 )
 
 var (
-	timeLeft int
+	timeLeft bool
 )
+
+type response struct {
+	move  Move
+	score int32
+}
 
 var numberToBits [8][256][]uint8
 
@@ -36,7 +43,7 @@ func combinations(board *ChessBoard, depth int) int {
 }
 
 func negaMax(board *ChessBoard, depth uint8, alpha, beta int32, age uint8) int32 {
-	if timeLeft <= 0 {
+	if !timeLeft {
 		return 0
 	}
 	if depth == 0 {
@@ -54,7 +61,7 @@ func negaMax(board *ChessBoard, depth uint8, alpha, beta int32, age uint8) int32
 	}
 
 	tranBestMoveIndex, tranDepth, tranScore, tranNode, tranAge, tranMatching := GetEntry(board.Zobrist)
-	if tranNode != 0 && tranDepth >= depth && tranMatching {
+	if tranNode != 0 && tranDepth >= depth && tranMatching && repetitions <= 1 {
 		if tranNode == ExactNode {
 			return tranScore
 		}
@@ -184,26 +191,83 @@ func Search(board *ChessBoard, depth uint8, age uint8) Move {
 		}
 		*board = temp
 	}
-	fmt.Println(bestScore)
 	return bestMove
 }
 
+func SearchMultiProcessing(board *ChessBoard, depth uint8, age uint8) Move {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	bestScore := int32lowest
+	var bestMove Move
+
+	moves := board.PsudoLegalMoves(false)
+
+	each := len(moves) / runtime.NumCPU()
+	extra := len(moves) % runtime.NumCPU()
+	add := 0
+	channel := make(chan response)
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		var m []Move
+		if extra == 0 {
+			m = moves[i*each+add : i*each+add+each]
+		} else {
+			m = moves[i*each+add : i*each+add+each+1]
+			extra--
+			add++
+		}
+		boardCopy := *board
+		boardCopy.Init()
+
+		go SearchProcess(m, channel, &boardCopy, depth, age)
+	}
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		resp := <-channel
+		if resp.score >= bestScore {
+			bestScore = resp.score
+			bestMove = resp.move
+		}
+	}
+
+	return bestMove
+}
+
+func SearchProcess(moves []Move, channel chan response, board *ChessBoard, depth uint8, age uint8) {
+	bestScore := int32lowest
+	var bestMove Move
+
+	for _, m := range moves {
+		temp := *board
+		board.DoMove(m)
+		if !board.CheckForCheck(board.BlacksTurn) {
+			score := -negaMax(board, depth-1, int32lowest, int32highest, age)
+			if score >= bestScore {
+				bestScore = score
+				bestMove = m
+			}
+		}
+		*board = temp
+	}
+	channel <- response{bestMove, bestScore}
+}
+
 func IterativeDeepening(board *ChessBoard) Move {
-	timeLeft = 1000
+	timeLeft = true
 	go timer()
 	var bestMove Move
-	for depth := 1; timeLeft > 0; depth++ {
-		newMove := Search(board, uint8(depth), 0)
-		if timeLeft > 0 {
+	for depth := 1; timeLeft; depth++ {
+		newMove := SearchMultiProcessing(board, uint8(depth), 0)
+		if timeLeft {
 			bestMove = newMove
+		} else {
+			fmt.Printf("Depth: %v\n", depth-1)
 		}
 	}
 	return bestMove
 }
 
 func timer() {
-	for timeLeft > 0 {
-		time.Sleep(time.Millisecond * 10)
-		timeLeft -= 10
-	}
+	time.Sleep(timeWait * time.Millisecond)
+	timeLeft = false
 }
