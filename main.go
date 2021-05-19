@@ -48,6 +48,7 @@ func main() {
 	g := game{}
 	g.board = bitboard.FenString("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -")
 	g.board.Init()
+	g.board.InitVariables()
 
 	if err := ebiten.RunGame(&g); err != nil {
 		log.Fatal(err)

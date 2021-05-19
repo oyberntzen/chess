@@ -554,10 +554,6 @@ func (board *ChessBoard) PromotePawn(square Bitboard, newType PieceType) {
 }
 
 func (board *ChessBoard) Init() {
-	board.AllWhitePieces = board.WhitePawns | board.WhiteRooks | board.WhiteKnights | board.WhiteBishops | board.WhiteQueens | board.WhiteKing
-	board.AllBlackPieces = board.BlackPawns | board.BlackRooks | board.BlackKnights | board.BlackBishops | board.BlackQueens | board.BlackKing
-	board.AllPieces = board.AllWhitePieces | board.AllBlackPieces
-
 	board.AllBitboards[0] = &board.WhitePawns
 	board.AllBitboards[1] = &board.WhiteRooks
 	board.AllBitboards[2] = &board.WhiteKnights
@@ -570,6 +566,13 @@ func (board *ChessBoard) Init() {
 	board.AllBitboards[9] = &board.BlackBishops
 	board.AllBitboards[10] = &board.BlackQueens
 	board.AllBitboards[11] = &board.BlackKing
+
+}
+
+func (board *ChessBoard) InitVariables() {
+	board.AllWhitePieces = board.WhitePawns | board.WhiteRooks | board.WhiteKnights | board.WhiteBishops | board.WhiteQueens | board.WhiteKing
+	board.AllBlackPieces = board.BlackPawns | board.BlackRooks | board.BlackKnights | board.BlackBishops | board.BlackQueens | board.BlackKing
+	board.AllPieces = board.AllWhitePieces | board.AllBlackPieces
 
 	board.WhiteEnPassant = 8
 	board.BlackEnPassant = 8
